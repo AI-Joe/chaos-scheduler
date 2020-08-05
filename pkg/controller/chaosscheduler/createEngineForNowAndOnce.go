@@ -43,7 +43,7 @@ func (schedulerReconcile *reconcileScheduler) createForNowAndOnce(cs *chaosTypes
 		cs.Instance.Spec.ScheduleState = schedulerV1.StateActive
 		cs.Instance.Status.Schedule.Status = schedulerV1.StatusRunning
 		cs.Instance.Status.Schedule.TotalInstances = 1
-		cs.Instance.Status.Schedule.StartTime = metav1.Now()
+		cs.Instance.Status.Schedule.StartTime = &metav1.Time{Time: metav1.Now().Time}
 		cs.Instance.Status.LastScheduleTime = &metav1.Time{Time: metav1.Now().Time}
 		ref, errRef := schedulerReconcile.r.getRef(engine)
 		if errRef != nil {
@@ -59,7 +59,7 @@ func (schedulerReconcile *reconcileScheduler) createForNowAndOnce(cs *chaosTypes
 		return reconcile.Result{}, err
 	} else if IsEngineFinished(engine) {
 		cs.Instance.Spec.ScheduleState = schedulerV1.StateCompleted
-		cs.Instance.Status.Schedule.EndTime = metav1.Now()
+		cs.Instance.Status.Schedule.EndTime = &metav1.Time{Time: metav1.Now().Time}
 		if err := schedulerReconcile.r.client.Update(context.TODO(), cs.Instance); err != nil {
 			return reconcile.Result{}, err
 		}

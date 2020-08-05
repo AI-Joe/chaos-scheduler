@@ -6,9 +6,9 @@ ENV OPERATOR=/usr/local/bin/chaos-scheduler \
     USER_NAME=chaos-scheduler
 
 # install operator binary
-COPY build/_output/bin/chaos-scheduler ${OPERATOR}
+COPY _output/bin/chaos-scheduler ${OPERATOR}
 
-COPY build/bin /usr/local/bin
+COPY bin /usr/local/bin
 RUN  /usr/local/bin/user_setup
 
 ENTRYPOINT ["/usr/local/bin/entrypoint"]

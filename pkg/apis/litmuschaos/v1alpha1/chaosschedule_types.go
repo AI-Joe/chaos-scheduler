@@ -30,7 +30,7 @@ type ChaosScheduleSpec struct {
 	EngineTemplateSpec operatorV1.ChaosEngineSpec `json:"engineTemplateSpec,omitempty"`
 }
 
-// ConcurrencyPolicy
+// ConcurrencyPolicy ...
 type ConcurrencyPolicy string
 
 const (
@@ -81,9 +81,9 @@ type ScheduleStatus struct {
 	//Status defines the current running status of the schedule
 	Status ChaosStatus `json:"status"`
 	//StartTime defines the starting timestamp of the schedule
-	StartTime metav1.Time `json:"startTime,omitempty"`
+	StartTime *metav1.Time `json:"startTime,omitempty"`
 	//EndTime defines the end timestamp of the schedule
-	EndTime metav1.Time `json:"endTime,omitempty"`
+	EndTime *metav1.Time `json:"endTime,omitempty"`
 	//TotalInstances defines the total no. of instances to be executed
 	TotalInstances int `json:"totalInstances,omitempty"`
 	//RunInstances defines number of already ran instances at that point of time
@@ -131,9 +131,11 @@ type ScheduleRepeat struct {
 	//Days of week when experiments batch run is scheduled
 	IncludedDays string `json:"includedDays"`
 	//Start limit of the time range in which experiment is to be run
-	StartTime metav1.Time `json:"startTime"`
+	StartTime *metav1.Time `json:"startTime,omitempty"`
 	//End limit of the time range in which experiment is to be run
-	EndTime metav1.Time `json:"endTime"`
+	EndTime *metav1.Time `json:"endTime,omitempty"`
+	//The hours in cron syntax in which experiments are allowed to run
+	IncludedHours string `json:"includedHours,omitempty"`
 	//Whether the chaos is to be scheduled at a random time or not
 	Random bool `json:"random"`
 }

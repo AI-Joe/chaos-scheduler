@@ -164,7 +164,7 @@ func (schedulerReconcile *reconcileScheduler) reconcileForComplete(cs *chaosType
 
 	opts := client.UpdateOptions{}
 	cs.Instance.Status.Schedule.Status = schedulerV1.StatusCompleted
-	cs.Instance.Status.Schedule.EndTime = metav1.Now()
+	cs.Instance.Status.Schedule.EndTime = &metav1.Time{Time: metav1.Now().Time}
 	if err := schedulerReconcile.r.client.Update(context.TODO(), cs.Instance, &opts); err != nil {
 		schedulerReconcile.r.recorder.Eventf(cs.Instance, corev1.EventTypeWarning, "ScheduleCompleted", "Cannot update status as completed")
 		return reconcile.Result{}, fmt.Errorf("Unable to update chaosSchedule for status completed, due to error: %v", err)

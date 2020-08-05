@@ -29,14 +29,16 @@ func (schedulerReconcile *reconcileScheduler) createEngineRepeat(cs *chaosTypes.
 		return reconcile.Result{}, errUpdate
 	}
 
-	if metav1.Now().After(cs.Instance.Spec.Schedule.Repeat.EndTime.Time) {
-
-		schedulerReconcile.reqLogger.Info("end time already passed", "endTime", cs.Instance.Spec.Schedule.Repeat.EndTime)
-		cs.Instance.Spec.ScheduleState = schedulerV1.StateCompleted
-		if errUpdate := schedulerReconcile.r.client.Update(context.TODO(), cs.Instance); errUpdate != nil {
-			return reconcile.Result{}, errUpdate
+	endTime := cs.Instance.Spec.Schedule.Repeat.EndTime
+	if endTime != nil {
+		if metav1.Now().After(endTime.Time) && !endTime.Time.IsZero() {
+			schedulerReconcile.reqLogger.Info("end time already passed", "endTime", cs.Instance.Spec.Schedule.Repeat.EndTime)
+			cs.Instance.Spec.ScheduleState = schedulerV1.StateCompleted
+			if errUpdate := schedulerReconcile.r.client.Update(context.TODO(), cs.Instance); errUpdate != nil {
+				return reconcile.Result{}, errUpdate
+			}
+			return reconcile.Result{}, nil
 		}
-		return reconcile.Result{}, nil
 	}
 
 	if cs.Instance.DeletionTimestamp != nil {
@@ -49,6 +51,9 @@ func (schedulerReconcile *reconcileScheduler) createEngineRepeat(cs *chaosTypes.
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+
+	schedulerReconcile.reqLogger.Info(fmt.Sprintf("current time: %v", time.Now()))
+	schedulerReconcile.reqLogger.Info(fmt.Sprintf("cron string %s, endTime: %v", cronString, endTime))
 
 	scheduledTime, errNew := getRecentUnmetScheduleTime(cs, cronString)
 	if errNew != nil {
@@ -149,23 +154,39 @@ func getRecentUnmetScheduleTime(cs *chaosTypes.SchedulerInfo, cronString string)
 		temp := t
 		previousTime = &temp
 	}
-	// cs.Instance.Status.Schedule.ExpectedNextRunTime = metav1.Time{Time: sched.Next(*previousTime)}
+
+	if previousTime != nil {
+		cs.Instance.Status.Schedule.ExpectedNextRunTime = metav1.Time{Time: cronSchedule.Next(*previousTime)}
+	}
+
 	return previousTime, nil
 }
 
 func scheduleRepeat(cs *chaosTypes.SchedulerInfo) (string, time.Duration, error) {
-
 	interval, err := fetchInterval(cs.Instance.Spec.Schedule.Repeat.MinChaosInterval)
 	if err != nil {
 		return "", time.Duration(0), errors.New("error in parsing minChaosInterval(make sure to include 'm' or 'h' suffix for minutes and hours respectively)")
 	}
+
 	instances, err := fetchInstances(cs.Instance.Spec.Schedule.Repeat.InstanceCount)
 	if err != nil {
 		return "", time.Duration(0), errors.New("error in parsing instanceCount")
 	}
 
-	startTime := cs.Instance.Spec.Schedule.Repeat.StartTime
-	endTime := cs.Instance.Spec.Schedule.Repeat.EndTime
+	if instances > 0 {
+		return "", time.Duration(0), errors.New("currently an unsupported feature")
+	}
+
+	/* includedHours will be given in form comma seperated
+	 * list such as 0,2,4
+	 * or in the range form such as 0-23
+	 * 0 represents 12AM UTC
+	 */
+	includedHours := cs.Instance.Spec.Schedule.Repeat.IncludedHours
+	if includedHours == "" {
+		includedHours = "*"
+	}
+
 	/* includedDays will be given in form comma seperated
 	 * list such as 0,2,4 or Mon,Wed,Sat
 	 * or in the range form such as 2-4 or Mon-Wed
@@ -175,37 +196,48 @@ func scheduleRepeat(cs *chaosTypes.SchedulerInfo) (string, time.Duration, error)
 	if includedDays == "" {
 		return "", time.Duration(0), errors.New("Missing IncludedDays")
 	}
-	duration := endTime.Sub(startTime.UTC())
-	// One of the minChaosInterval or instances is mandatory to be given
-	if interval != 0 {
-		/* MinChaosInterval will be in form of "10m" or "2h"
-		 * where 'm' or 'h' indicating "minutes" or "hours" respectively
-		 */
-		// cs.Instance.Status.Schedule.TotalInstances, err = getTotalInstances(cs)
-		// if err != nil {
-		// 	return "", err
-		// }
-		if strings.Contains(cs.Instance.Spec.Schedule.Repeat.MinChaosInterval, "m") {
-			return fmt.Sprintf("*/%d * * * %s", interval, includedDays), time.Minute * time.Duration(interval), nil
-		}
-		return fmt.Sprintf("* */%d * * %s", interval, includedDays), time.Hour * time.Duration(interval), nil
-	} else if instances != 0 {
-		cs.Instance.Status.Schedule.TotalInstances = instances
-		//schedule at the end time will not be able to schedule so increaing the no. of instance
-		intervalHours := duration.Hours() / float64(instances)
-		intervalMinutes := duration.Minutes() / float64(instances)
 
-		if intervalHours >= 1 {
-			// to be sent in form of EnvVariable to executor
-			cs.Instance.Spec.Schedule.Repeat.MinChaosInterval = fmt.Sprintf("%dh", int(intervalHours))
-			return fmt.Sprintf("* */%d * * %s", int(intervalHours), includedDays), time.Hour * time.Duration(intervalHours), nil
-		} else if intervalMinutes >= 1 {
-			// to be sent in form of EnvVariable to executor
-			cs.Instance.Spec.Schedule.Repeat.MinChaosInterval = fmt.Sprintf("%dm", int(intervalMinutes))
-			return fmt.Sprintf("*/%d * * * %s", int(intervalMinutes), includedDays), time.Minute * time.Duration(intervalMinutes), nil
+	// One of the minChaosInterval or instances is mandatory to be given
+	// if instances != 0 {
+	// 	startTime := cs.Instance.Spec.Schedule.Repeat.StartTime
+	// 	if startTime == nil {
+	// 		return "", time.Duration(0), errors.New("Missing Start time")
+	// 	}
+
+	// 	endTime := cs.Instance.Spec.Schedule.Repeat.EndTime
+	// 	if endTime == nil {
+	// 		return "", time.Duration(0), errors.New("Missing End time")
+	// 	}
+
+	// 	parser := cron.NewParser(cron.Hour)
+	// 	hours, err := parser.Parse(includedHours)
+	// 	if err != nil {
+	// 		return "", time.Duration(0), errors.New("Could not parse included hours")
+	// 	}
+
+	// 	hours.
+
+	// 	duration := endTime.Sub(startTime.UTC())
+
+	// 	cs.Instance.Status.Schedule.TotalInstances = instances
+	// 	//schedule at the end time will not be able to schedule so increaing the no. of instance
+	// 	interval := duration.Minutes() / float64(instances)
+	// 	if interval < 1 {
+	// 		return "", time.Duration(0), errors.New("Too many instances to execute")
+	// 	}
+
+	// 	// to be sent in form of EnvVariable to executor
+	// 	cs.Instance.Spec.Schedule.Repeat.MinChaosInterval = fmt.Sprintf("%dm", int(interval))
+	// }
+
+	if interval != 0 || includedHours != "*" {
+		if interval == 0 {
+			interval = 1
 		}
-		return "", time.Duration(0), errors.New("Too many instances to execute")
+
+		return fmt.Sprintf("*/%d %s * * %s", interval, includedHours, includedDays), time.Minute * time.Duration(interval), nil
 	}
+
 	return "", time.Duration(0), errors.New("MinChaosInterval and InstanceCount both not found")
 }
 
@@ -215,11 +247,12 @@ func fetchInterval(minChaosInterval string) (int, error) {
 	 */
 	if minChaosInterval == "" {
 		return 0, nil
-	} else if strings.Contains(minChaosInterval, "h") {
-		return strconv.Atoi(strings.Split(minChaosInterval, "h")[0])
-	} else if strings.Contains(minChaosInterval, "m") {
+	}
+
+	if strings.Contains(minChaosInterval, "m") {
 		return strconv.Atoi(strings.Split(minChaosInterval, "m")[0])
 	}
+
 	return 0, errors.New("minChaosInterval should be in either minutes or hours and the prefix should be 'm' or 'h' respectively")
 }
 

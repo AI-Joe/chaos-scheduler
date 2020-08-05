@@ -17,10 +17,10 @@ spec:
       containers:
         - name: chaos-scheduler
           # Replace this with the built image name
-          image: litmuschaos/chaos-scheduler:ci
+          image: pnc/chaos-scheduler:latest
           command:
           - chaos-scheduler
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           env:
             - name: WATCH_NAMESPACE
             - name: POD_NAME
